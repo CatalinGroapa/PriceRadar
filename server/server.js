@@ -12,6 +12,23 @@ const cache = new NodeCache({ stdTTL: 300 });
 app.use(cors());
 app.use(express.json());
 
+const allowedImageHosts = new Set([
+    'darwin.md',
+    'www.cactus.md',
+    'cactus.md',
+    'bomba.md',
+    'pandashop.md',
+    'www.pandashop.md',
+    'cdn.pandashop.md'
+]);
+
+function isAllowedImageHost(hostname) {
+    if (!hostname) return false;
+    const normalized = hostname.toLowerCase();
+    if (allowedImageHosts.has(normalized)) return true;
+    return Array.from(allowedImageHosts).some((host) => normalized.endsWith(`.${host}`));
+}
+
 // Funcție helper pentru delay între request-uri
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -66,11 +83,12 @@ const storeConfigs = {
         icon: '🐼',
         searchUrl: (query) => `https://pandashop.md/ro/search/?text=${encodeURIComponent(query)}`,
         selectors: {
-            productCard: '.card',
-            title: '.card-title .lnk-txt',
-            price: '.card-price_curr',
-            image: 'img',
-            link: 'a[href*="/product/"]'
+            productCard: '.js-itemsList.cardsList .card.js-itemsList-item',
+            title: '.card-title .lnk-txt, [itemprop="name"]',
+            price: '.card-price_curr, meta[itemprop="price"]',
+            image: 'meta[itemprop="image"], picture source[srcset], img[itemprop="image"], img',
+            link: 'a.card-title, a[href*="/product/"]',
+            availability: 'link[itemprop="availability"]'
         }
     }
 };
@@ -148,7 +166,9 @@ async function scrapeStore(browser, storeName, query, config) {
                 try {
                     // Extrage titlul
                     const titleEl = card.querySelector(selectors.title);
-                    const title = titleEl ? titleEl.textContent.trim() : null;
+                    const title = titleEl
+                        ? ((titleEl.getAttribute && titleEl.getAttribute('content')) || titleEl.textContent || '').trim()
+                        : null;
                     
                     console.log(`  Card ${index}: title="${title}"`);
                     
@@ -157,19 +177,35 @@ async function scrapeStore(browser, storeName, query, config) {
                     // Extrage prețul
                     const priceEl = card.querySelector(selectors.price);
                     let price = 0;
+                    let priceText = '';
                     if (priceEl) {
-                        const priceText = priceEl.textContent.trim();
-                        const priceMatch = priceText.match(/[\d\s]+/);
-                        if (priceMatch) {
-                            price = parseFloat(priceMatch[0].replace(/\s/g, ''));
-                        }
+                        priceText = (
+                            (priceEl.getAttribute && priceEl.getAttribute('content')) ||
+                            priceEl.textContent ||
+                            ''
+                        ).trim();
+                    }
+                    if (!priceText) {
+                        priceText = (card.textContent || '').trim();
+                    }
+                    const priceMatch = priceText.match(/(\d[\d\s.,]{2,})/);
+                    if (priceMatch) {
+                        price = parseFloat(priceMatch[1].replace(/[^\d]/g, ''));
                     }
                     
                     // Extrage imaginea
                     const imgEl = card.querySelector(selectors.image);
                     let image = '/api/placeholder/200/200';
                     if (imgEl) {
-                        image = imgEl.src || imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || image;
+                        const srcset = imgEl.getAttribute && imgEl.getAttribute('srcset');
+                        const firstSrcFromSet = srcset ? srcset.split(',')[0].trim().split(' ')[0] : '';
+                        image =
+                            (imgEl.getAttribute && imgEl.getAttribute('content')) ||
+                            firstSrcFromSet ||
+                            imgEl.src ||
+                            (imgEl.getAttribute && imgEl.getAttribute('data-src')) ||
+                            (imgEl.getAttribute && imgEl.getAttribute('data-lazy-src')) ||
+                            image;
                         // Normalizează URL-ul imaginii
                         if (image.startsWith('//')) {
                             image = 'https:' + image;
@@ -191,6 +227,22 @@ async function scrapeStore(browser, storeName, query, config) {
                         }
                     }
                     
+                    const availabilityEl = selectors.availability
+                        ? card.querySelector(selectors.availability)
+                        : null;
+                    const availabilityHref = availabilityEl
+                        ? (availabilityEl.getAttribute('href') || '')
+                        : '';
+                    const stockText = (card.textContent || '').toLowerCase();
+                    const explicitOutOfStock =
+                        availabilityHref.includes('OutOfStock') ||
+                        stockText.includes('indisponibil') ||
+                        stockText.includes('stoc epuizat') ||
+                        stockText.includes('out of stock');
+                    const inStock = availabilityHref
+                        ? availabilityHref.includes('InStock')
+                        : !explicitOutOfStock;
+
                     results.push({
                         id: `${storeName}_${Date.now()}_${index}`,
                         title: title,
@@ -203,8 +255,8 @@ async function scrapeStore(browser, storeName, query, config) {
                         description: title,
                         rating: 4 + Math.random(), // Random rating între 4-5
                         reviews: Math.floor(Math.random() * 100) + 10,
-                        availability: price > 0 ? 'În stoc' : 'Indisponibil',
-                        inStock: price > 0  // Pentru filtrul frontend
+                        availability: inStock ? 'În stoc' : 'Indisponibil',
+                        inStock: inStock  // Pentru filtrul frontend
                     });
                 } catch (err) {
                     console.error('Error parsing product card:', err);
@@ -289,6 +341,62 @@ app.get('/search', async (req, res) => {
             error: 'Failed to scrape products',
             message: error.message 
         });
+    }
+});
+
+app.get('/image-proxy', async (req, res) => {
+    const rawUrl = String(req.query.url || '').trim();
+
+    if (!rawUrl) {
+        return res.status(400).json({ error: 'Query parameter "url" is required' });
+    }
+
+    let targetUrl;
+    try {
+        targetUrl = new URL(rawUrl);
+    } catch (error) {
+        return res.status(400).json({ error: 'Invalid image URL' });
+    }
+
+    if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+        return res.status(400).json({ error: 'Only http/https URLs are allowed' });
+    }
+
+    if (!isAllowedImageHost(targetUrl.hostname)) {
+        return res.status(403).json({ error: 'Image host is not allowed' });
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const upstream = await fetch(targetUrl.toString(), {
+            method: 'GET',
+            redirect: 'follow',
+            signal: controller.signal,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+                'Referer': `${targetUrl.protocol}//${targetUrl.hostname}/`
+            }
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!upstream.ok) {
+            return res.status(upstream.status).json({ error: `Upstream image request failed with ${upstream.status}` });
+        }
+
+        const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+        const cacheHeader = upstream.headers.get('cache-control') || 'public, max-age=3600';
+        const buffer = Buffer.from(await upstream.arrayBuffer());
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', cacheHeader);
+        res.send(buffer);
+    } catch (error) {
+        console.error('Image proxy error:', error.message);
+        res.status(502).json({ error: 'Failed to fetch image from source' });
     }
 });
 

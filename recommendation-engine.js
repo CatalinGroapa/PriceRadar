@@ -1,4 +1,4 @@
-// Motor de recomandări cu algoritmi de scoring
+// Recommendation engine with stronger relevance filtering.
 class RecommendationEngine {
     constructor(nlpEngine) {
         this.nlpEngine = nlpEngine;
@@ -11,52 +11,56 @@ class RecommendationEngine {
         };
     }
 
-    // Normalizează prețul (inversul scorului - prețuri mai mici = scor mai mare)
     normalizePriceScore(price, minPrice, maxPrice) {
-        if (maxPrice === minPrice) return 100;
-        // Inversăm scorul: prețuri mici primesc scor mare
+        if (!Number.isFinite(price)) return 0;
+        if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice) || maxPrice === minPrice) {
+            return 100;
+        }
+
         return ((maxPrice - price) / (maxPrice - minPrice)) * 100;
     }
 
-    // Normalizează rating-ul
     normalizeRatingScore(rating, reviewCount) {
-        // Scoring bazat pe rating cu pondere pentru numărul de recenzii
-        const ratingScore = (rating / 5) * 100;
-        
-        // Confidence factor bazat pe numărul de recenzii
-        const reviewConfidence = Math.min(reviewCount / 100, 1);
-        
+        const safeRating = Number.isFinite(Number(rating)) ? Number(rating) : 0;
+        const safeReviewCount = Number.isFinite(Number(reviewCount)) ? Number(reviewCount) : 0;
+        const ratingScore = (safeRating / 5) * 100;
+        const reviewConfidence = Math.min(safeReviewCount / 100, 1);
+
         return ratingScore * (0.7 + reviewConfidence * 0.3);
     }
 
-    // Scor pentru disponibilitate
     availabilityScore(inStock) {
         return inStock ? 100 : 0;
     }
 
-    // Calculează scorul compozit pentru fiecare produs
+    getReviewCount(product) {
+        const raw = product.reviewCount ?? product.reviews ?? 0;
+        const normalized = Number(raw);
+        return Number.isFinite(normalized) ? normalized : 0;
+    }
+
     calculateProductScore(product, searchQuery, priceRange) {
         const { minPrice, maxPrice } = priceRange;
+        const price = Number.isFinite(Number(product.price)) ? Number(product.price) : 0;
+        const rating = Number.isFinite(Number(product.rating)) ? Number(product.rating) : 0;
+        const reviewCount = this.getReviewCount(product);
 
-        // Score individual pentru fiecare criteriu
-        const priceScore = this.normalizePriceScore(product.price, minPrice, maxPrice);
-        const ratingScore = this.normalizeRatingScore(product.rating, product.reviewCount);
+        const priceScore = this.normalizePriceScore(price, minPrice, maxPrice);
+        const ratingScore = this.normalizeRatingScore(rating, reviewCount);
         const availScore = this.availabilityScore(product.inStock);
-        
-        // NLP Analysis
-        const nlpAnalysis = this.nlpEngine.analyzeProduct(product, searchQuery);
-        const relevanceScore = nlpAnalysis.relevanceScore;
 
-        // Bonus pentru sentiment pozitiv
+        const nlpAnalysis = this.nlpEngine.analyzeProduct(product, searchQuery);
+        const relevanceScore = Number.isFinite(Number(nlpAnalysis.relevanceScore))
+            ? Number(nlpAnalysis.relevanceScore)
+            : 0;
+
         let sentimentBonus = 0;
         if (nlpAnalysis.sentiment.label === 'positive') {
             sentimentBonus = nlpAnalysis.sentiment.confidence * 0.1;
         }
 
-        // Review count score (mai multe recenzii = mai de încredere)
-        const reviewScore = Math.min((product.reviewCount / 500) * 100, 100);
+        const reviewScore = Math.min((reviewCount / 500) * 100, 100);
 
-        // Calculează scorul final ponderat
         const finalScore = (
             priceScore * this.weights.price +
             ratingScore * this.weights.rating +
@@ -67,7 +71,7 @@ class RecommendationEngine {
         );
 
         return {
-            finalScore: Math.round(finalScore),
+            finalScore: Math.round(Number.isFinite(finalScore) ? finalScore : 0),
             breakdown: {
                 price: Math.round(priceScore),
                 rating: Math.round(ratingScore),
@@ -80,93 +84,121 @@ class RecommendationEngine {
         };
     }
 
-    // Extrage numere din text (pentru model matching)
     extractNumbers(text) {
-        const matches = text.match(/\d+/g);
-        return matches ? matches.map(n => parseInt(n)) : [];
+        const matches = String(text || '').match(/\d+/g);
+        return matches ? matches.map(n => parseInt(n, 10)) : [];
     }
 
-    // Verifică dacă produsul este un accesoriu (husă, folie, cablu, etc.)
+    extractQueryTokens(text) {
+        return String(text || '')
+            .toLowerCase()
+            .normalize('NFKD')
+            .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+            .split(/\s+/)
+            .map(token => token.trim())
+            .filter(token => token.length >= 2);
+    }
+
+    extractModelCodes(text) {
+        return this.extractQueryTokens(text)
+            .filter(token => /[a-z]/i.test(token) && /\d/.test(token) && token.length >= 5);
+    }
+
     isAccessory(productTitle) {
         const accessoryKeywords = [
-            'husă', 'husa', 'huse', 'case',
-            'folie', 'folii', 'sticlă', 'sticla', 'protecție', 'protectie', 'glass',
-            'cablu', 'cabluri', 'cable', 'încărcător', 'incarcator', 'charger',
+            'husa', 'huse', 'case',
+            'folie', 'folii', 'sticla', 'protectie', 'glass',
+            'cablu', 'cabluri', 'cable', 'incarcator', 'charger',
             'adaptor', 'adapter',
-            'căști', 'casti', 'headphones', 'earphones', 'airpods',
+            'casti', 'headphones', 'earphones', 'airpods',
             'suport', 'holder', 'stand',
-            'baterie externă', 'powerbank', 'power bank',
+            'baterie externa', 'powerbank', 'power bank',
             'stylus', 'pen',
             'card memorie', 'sd card', 'micro sd',
             'sim card',
-            'cleaner', 'curățare', 'curatare'
+            'cleaner', 'curatare',
+            'chehol', 'steklo', 'zaryadnoe'
         ];
-        
-        const lowerTitle = productTitle.toLowerCase();
+
+        const lowerTitle = String(productTitle || '').toLowerCase().normalize('NFKD');
         return accessoryKeywords.some(keyword => lowerTitle.includes(keyword));
     }
 
-    // Verifică dacă produsul match-uiește exact cu modelul cerut
     matchesModelNumber(productTitle, searchQuery) {
-        // Extrage numerele din query și din titlu
         const queryNumbers = this.extractNumbers(searchQuery);
         const titleNumbers = this.extractNumbers(productTitle);
-        
-        // Dacă query-ul nu conține numere, acceptă orice produs
+
         if (queryNumbers.length === 0) {
             return true;
         }
-        
-        // Dacă query conține doar un număr mic (< 20), fie este model fie alte specs
-        // De ex: "iphone 13" → trebuie să conțină 13
-        // Dar "laptop 8gb" → 8 poate fi RAM, nu model
+
         if (queryNumbers.length === 1 && queryNumbers[0] <= 20) {
-            // Verifică dacă numărul din query apare în titlu
             return titleNumbers.includes(queryNumbers[0]);
         }
-        
-        // Pentru query-uri cu multiple numere sau numere mari,
-        // verifică dacă măcar UNUL din numerele principale din query apare în titlu
-        // Asta permite "iphone 13 pro max 256gb" să matchuiască produse cu "13"
-        const mainQueryNumbers = queryNumbers.filter(n => n <= 20); // Numere mici = modele
-        
+
+        const mainQueryNumbers = queryNumbers.filter(n => n <= 20);
         if (mainQueryNumbers.length === 0) {
-            return true; // Nu sunt numere de model în query
+            return true;
         }
-        
-        // Verifică dacă măcar un număr de model apare în titlu
+
         return mainQueryNumbers.some(queryNum => titleNumbers.includes(queryNum));
     }
 
-    // Filtrează și sortează produsele
+    isRelevantToQuery(productTitle, searchQuery) {
+        const title = String(productTitle || '').toLowerCase();
+        const queryTokens = this.extractQueryTokens(searchQuery);
+
+        if (queryTokens.length === 0) {
+            return true;
+        }
+
+        const stopWords = new Set([
+            'de', 'cu', 'si', 'și', 'pentru', 'la', 'din', 'pe', 'in', 'în',
+            'the', 'and', 'for', 'pro', 'max', 'mini', 'plus'
+        ]);
+
+        const modelCodes = this.extractModelCodes(searchQuery);
+        if (modelCodes.length > 0) {
+            return modelCodes.some(code => title.includes(code));
+        }
+
+        const meaningfulTokens = queryTokens.filter(token => !stopWords.has(token));
+        if (meaningfulTokens.length === 0) {
+            return true;
+        }
+
+        const matchedCount = meaningfulTokens.filter(token => title.includes(token)).length;
+        const requiredMatches = meaningfulTokens.length === 1 ? 1 : Math.min(2, meaningfulTokens.length);
+
+        return matchedCount >= requiredMatches;
+    }
+
     recommendProducts(products, searchQuery, filters = {}) {
         if (!products || products.length === 0) {
             return [];
         }
 
-        // Filtrare
-        let filteredProducts = products.filter(product => {
-            // FILTRU NOU: Exclude accesoriile când cauți telefoane
+        const filteredProducts = products.filter(product => {
+            if (!this.isRelevantToQuery(product.title, searchQuery)) {
+                return false;
+            }
+
             if (this.isAccessory(product.title)) {
                 return false;
             }
 
-            // FILTRU NOU: Match exact pe numărul modelului
             if (!this.matchesModelNumber(product.title, searchQuery)) {
                 return false;
             }
 
-            // Filtru preț
-            if (filters.maxPrice && product.price > filters.maxPrice) {
+            if (filters.maxPrice && Number(product.price) > filters.maxPrice) {
                 return false;
             }
 
-            // Filtru rating
-            if (filters.minRating && product.rating < filters.minRating) {
+            if (filters.minRating && Number(product.rating || 0) < filters.minRating) {
                 return false;
             }
 
-            // Filtru disponibilitate
             if (filters.inStock && !product.inStock) {
                 return false;
             }
@@ -174,75 +206,78 @@ class RecommendationEngine {
             return true;
         });
 
-        // Găsește range-ul de prețuri pentru normalizare
-        const prices = filteredProducts.map(p => p.price);
+        if (filteredProducts.length === 0) {
+            return [];
+        }
+
+        const prices = filteredProducts
+            .map(product => Number(product.price))
+            .filter(price => Number.isFinite(price));
+
         const priceRange = {
-            minPrice: Math.min(...prices),
-            maxPrice: Math.max(...prices)
+            minPrice: prices.length ? Math.min(...prices) : 0,
+            maxPrice: prices.length ? Math.max(...prices) : 0
         };
 
-        // Calculează scor pentru fiecare produs
         const scoredProducts = filteredProducts.map(product => {
             const scoreData = this.calculateProductScore(product, searchQuery, priceRange);
             return {
                 ...product,
                 recommendationScore: scoreData.finalScore,
                 scoreBreakdown: scoreData.breakdown,
-                nlpData: scoreData.nlpAnalysis
+                nlpData: scoreData.nlpAnalysis,
+                reviewCount: this.getReviewCount(product)
             };
         });
 
-        // Sortare
         return this.sortProducts(scoredProducts, filters.sortBy || 'score');
     }
 
-    // Sortare produse după criteriu
     sortProducts(products, sortBy) {
         const sorted = [...products];
 
         switch (sortBy) {
             case 'price-asc':
                 return sorted.sort((a, b) => a.price - b.price);
-            
+
             case 'price-desc':
                 return sorted.sort((a, b) => b.price - a.price);
-            
+
             case 'rating':
                 return sorted.sort((a, b) => {
                     if (b.rating === a.rating) {
-                        return b.reviewCount - a.reviewCount;
+                        return this.getReviewCount(b) - this.getReviewCount(a);
                     }
                     return b.rating - a.rating;
                 });
-            
+
             case 'score':
             default:
                 return sorted.sort((a, b) => b.recommendationScore - a.recommendationScore);
         }
     }
 
-    // Generează explicații pentru recomandări
     generateExplanation(product) {
         const reasons = [];
 
         if (product.recommendationScore >= 80) {
-            reasons.push('Cel mai bun raport calitate-preț');
+            reasons.push('Cel mai bun raport calitate-pret');
         }
 
         if (product.scoreBreakdown.rating >= 85) {
-            reasons.push(`Rating excelent (${product.rating}⭐)`);
+            reasons.push(`Rating excelent (${product.rating} stele)`);
         }
 
-        if (product.reviewCount > 100) {
-            reasons.push(`${product.reviewCount} recenzii verificate`);
+        if (this.getReviewCount(product) > 100) {
+            reasons.push(`${this.getReviewCount(product)} recenzii verificate`);
         }
 
         if (product.nlpData.sentiment.label === 'positive') {
-            reasons.push('Recenzii predominantly pozitive');
+            reasons.push('Recenzii predominant pozitive');
         }
 
         if (product.scoreBreakdown.price >= 70) {
-            reasons.push('Preț competitiv');
+            reasons.push('Pret competitiv');
         }
 
         if (Object.keys(product.nlpData.features).length >= 3) {
@@ -252,30 +287,26 @@ class RecommendationEngine {
         return reasons.length > 0 ? reasons : ['Produs recomandat'];
     }
 
-    // Găsește produse similare
     findSimilarProducts(targetProduct, allProducts, limit = 3) {
         const similarities = allProducts
-            .filter(p => p.id !== targetProduct.id)
+            .filter(product => product.id !== targetProduct.id)
             .map(product => {
-                const titleSim = this.nlpEngine.calculateSimilarity(
-                    targetProduct.title,
-                    product.title
-                );
-                const priceSim = 1 - Math.abs(targetProduct.price - product.price) / 
+                const titleSim = this.nlpEngine.calculateSimilarity(targetProduct.title, product.title);
+                const priceSim = 1 - Math.abs(targetProduct.price - product.price) /
                     Math.max(targetProduct.price, product.price);
-                
-                const similarity = (titleSim * 0.7 + priceSim * 0.3);
-                
-                return { product, similarity };
+
+                return {
+                    product,
+                    similarity: (titleSim * 0.7 + priceSim * 0.3)
+                };
             })
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, limit);
 
-        return similarities.map(s => s.product);
+        return similarities.map(item => item.product);
     }
 }
 
-// Export pentru utilizare
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = RecommendationEngine;
 }
