@@ -10,12 +10,18 @@ class RecommendationEngine {
             relevance: 0.20
         };
         this.categoryKeywords = {
-            phone: ['telefon', 'smartphone', 'iphone', 'galaxy', 'redmi', 'pixel', 'phone', 'mobil'],
+            phone: [
+                'telefon', 'smartphone', 'iphone', 'galaxy', 'redmi', 'pixel', 'phone', 'mobil',
+                'телефон', 'смартфон', 'mobile phone'
+            ],
             laptop: ['laptop', 'notebook', 'ultrabook', 'macbook'],
             tablet: ['tableta', 'tablet', 'ipad'],
-            tv: ['televizor', 'tv', 'qled', 'oled', 'smart tv'],
+            tv: ['televizor', 'tv', 'qled', 'oled', 'smart tv', 'телевизор'],
             audio: ['casti', 'headphones', 'earbuds', 'boxa', 'speaker', 'soundbar'],
-            appliance: ['cuptor', 'plita', 'aragaz', 'frigider', 'masina de spalat', 'boiler', 'hota', 'microunde']
+            appliance: [
+                'cuptor', 'plita', 'aragaz', 'frigider', 'masina de spalat', 'boiler', 'hota', 'microunde',
+                'вытяжка', 'панель', 'духовой', 'холодильник', 'плита'
+            ]
         };
     }
 
@@ -164,7 +170,7 @@ class RecommendationEngine {
         if (queryCategories.size === 0) return true;
 
         const productCategories = this.productCategoriesFromTitle(productTitle);
-        if (productCategories.size === 0) return true;
+        if (productCategories.size === 0) return false;
 
         return Array.from(queryCategories).some(category => productCategories.has(category));
     }
@@ -232,12 +238,34 @@ class RecommendationEngine {
             return true;
         }
 
-        const matchedCount = meaningfulTokens.filter(token => title.includes(token)).length;
-        const requiredMatches = meaningfulTokens.length === 1
-            ? 1
-            : Math.max(1, Math.floor(meaningfulTokens.length * 0.5));
+        const textTokens = meaningfulTokens.filter(token => !/^\d+$/.test(token));
+        const numberTokens = meaningfulTokens.filter(token => /^\d+$/.test(token));
 
-        return matchedCount >= requiredMatches;
+        const textMatchedCount = textTokens.filter(token => title.includes(token)).length;
+        const matchedCount = meaningfulTokens.filter(token => title.includes(token)).length;
+
+        if (textTokens.length > 0 && textMatchedCount === 0) {
+            return false;
+        }
+
+        const requiredMatches = textTokens.length > 1
+            ? Math.max(2, Math.floor(textTokens.length * 0.6))
+            : (textTokens.length === 1 ? 1 : Math.max(1, Math.floor(meaningfulTokens.length * 0.5)));
+
+        if (matchedCount < requiredMatches) {
+            return false;
+        }
+
+        const storageSizes = new Set(['32', '64', '128', '256', '512', '1024', '2048']);
+        const storageInQuery = numberTokens.filter(token => storageSizes.has(token));
+        if (storageInQuery.length > 0) {
+            const hasStorageMatch = storageInQuery.some(size => new RegExp(`\\b${size}\\s?(gb|гб)?\\b`, 'i').test(title));
+            if (!hasStorageMatch) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     passesBasicFilters(product, filters = {}) {
@@ -269,6 +297,11 @@ class RecommendationEngine {
 
         const meaningfulTokens = tokens.filter(token => token.length >= 2);
         if (meaningfulTokens.length === 0) return true;
+
+        const textTokens = meaningfulTokens.filter(token => !/^\d+$/.test(token));
+        if (textTokens.length > 0) {
+            return textTokens.some(token => title.includes(token));
+        }
 
         // Relaxed mode: at least one meaningful token should match.
         return meaningfulTokens.some(token => title.includes(token));
