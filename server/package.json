@@ -4,6 +4,7 @@
   "description": "Backend server pentru scraping real produse din magazine Moldova",
   "main": "server.js",
   "scripts": {
+    "render-build": "npm install && npx puppeteer browsers install chrome",
     "start": "node server.js",
     "dev": "node server.js"
   },
