@@ -11,3 +11,11 @@ server/node_modules/
 # Local scraping artifacts / snapshots
 search-*.json
 *.html.bak
+
+# Secrets / local env files
+.env
+.env.*
+server/.env
+server/.env.*
+!.env.example
+!server/.env.example

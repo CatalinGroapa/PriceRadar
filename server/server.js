@@ -5,7 +5,7 @@ const NodeCache = require('node-cache');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 // Cache pentru 5 minute
 const cache = new NodeCache({ stdTTL: 300 });
@@ -39,12 +39,12 @@ function extractFirstJsonObject(text) {
 }
 
 async function aiRerankProducts(query, products) {
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey || !Array.isArray(products) || products.length === 0) {
         return products;
     }
 
-    const model = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+    const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     const candidates = products.slice(0, Math.min(products.length, 60)).map((p, i) => ({
         id: p.id,
         title: p.title,
@@ -65,14 +65,12 @@ async function aiRerankProducts(query, products) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-        const response = await fetch(OPENROUTER_API_URL, {
+        const response = await fetch(OPENAI_API_URL, {
             method: 'POST',
             signal: controller.signal,
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
-                'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'http://localhost:3000',
-                'X-Title': process.env.OPENROUTER_APP_NAME || 'PricePulse'
+                Authorization: `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model,
@@ -88,7 +86,7 @@ async function aiRerankProducts(query, products) {
 
         if (!response.ok) {
             const errText = await response.text();
-            console.warn('OpenRouter rerank skipped:', response.status, errText.slice(0, 250));
+            console.warn('OpenAI rerank skipped:', response.status, errText.slice(0, 250));
             return products;
         }
 
@@ -114,7 +112,7 @@ async function aiRerankProducts(query, products) {
             return bScore - aScore;
         });
     } catch (error) {
-        console.warn('OpenRouter rerank error, default order used:', error.message);
+        console.warn('OpenAI rerank error, default order used:', error.message);
         return products;
     }
 }
@@ -423,7 +421,7 @@ app.get('/search', async (req, res) => {
         
         console.log(`\n✨ Total: ${finalProducts.length} produse găsite`);
         if (useAiRerank) {
-            console.log('🤖 AI rerank:', process.env.OPENROUTER_API_KEY ? 'enabled' : 'skipped (missing OPENROUTER_API_KEY)');
+            console.log('🤖 AI rerank:', process.env.OPENAI_API_KEY ? 'enabled' : 'skipped (missing OPENAI_API_KEY)');
         }
         
         // Salvează în cache
