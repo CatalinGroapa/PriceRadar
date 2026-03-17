@@ -9,6 +9,14 @@ class RecommendationEngine {
             availability: 0.10,
             relevance: 0.20
         };
+        this.categoryKeywords = {
+            phone: ['telefon', 'smartphone', 'iphone', 'galaxy', 'redmi', 'pixel', 'phone', 'mobil'],
+            laptop: ['laptop', 'notebook', 'ultrabook', 'macbook'],
+            tablet: ['tableta', 'tablet', 'ipad'],
+            tv: ['televizor', 'tv', 'qled', 'oled', 'smart tv'],
+            audio: ['casti', 'headphones', 'earbuds', 'boxa', 'speaker', 'soundbar'],
+            appliance: ['cuptor', 'plita', 'aragaz', 'frigider', 'masina de spalat', 'boiler', 'hota', 'microunde']
+        };
     }
 
     normalizePriceScore(price, minPrice, maxPrice) {
@@ -105,6 +113,62 @@ class RecommendationEngine {
             .filter(token => /[a-z]/i.test(token) && /\d/.test(token) && token.length >= 2);
     }
 
+    compactText(text) {
+        return String(text || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+    }
+
+    titleContainsModelCode(productTitle, modelCode) {
+        const compactTitle = this.compactText(productTitle);
+        const compactCode = this.compactText(modelCode);
+        return compactCode.length > 0 && compactTitle.includes(compactCode);
+    }
+
+    detectQueryCategories(searchQuery) {
+        const query = String(searchQuery || '').toLowerCase();
+        const detected = new Set();
+
+        Object.entries(this.categoryKeywords).forEach(([category, keywords]) => {
+            if (keywords.some(keyword => query.includes(keyword))) {
+                detected.add(category);
+            }
+        });
+
+        // Heuristic: Samsung short model codes are usually phones (S23, A55, M14, etc.).
+        const hasSamsung = query.includes('samsung');
+        const modelCodes = this.extractModelCodes(searchQuery);
+        const looksLikeSamsungPhoneModel = modelCodes.some(code => /^[asfmx]\d{1,3}$/i.test(code));
+        if (hasSamsung && looksLikeSamsungPhoneModel) {
+            detected.add('phone');
+        }
+
+        return detected;
+    }
+
+    productCategoriesFromTitle(productTitle) {
+        const title = String(productTitle || '').toLowerCase();
+        const categories = new Set();
+
+        Object.entries(this.categoryKeywords).forEach(([category, keywords]) => {
+            if (keywords.some(keyword => title.includes(keyword))) {
+                categories.add(category);
+            }
+        });
+
+        return categories;
+    }
+
+    matchesQueryCategory(productTitle, searchQuery) {
+        const queryCategories = this.detectQueryCategories(searchQuery);
+        if (queryCategories.size === 0) return true;
+
+        const productCategories = this.productCategoriesFromTitle(productTitle);
+        if (productCategories.size === 0) return true;
+
+        return Array.from(queryCategories).some(category => productCategories.has(category));
+    }
+
     isAccessory(productTitle) {
         const accessoryKeywords = [
             'husa', 'huse', 'case',
@@ -160,7 +224,7 @@ class RecommendationEngine {
 
         const modelCodes = this.extractModelCodes(searchQuery);
         if (modelCodes.length > 0) {
-            return modelCodes.some(code => title.includes(code));
+            return modelCodes.some(code => this.titleContainsModelCode(title, code));
         }
 
         const meaningfulTokens = queryTokens.filter(token => !stopWords.has(token));
@@ -197,6 +261,12 @@ class RecommendationEngine {
         const tokens = this.extractQueryTokens(searchQuery);
         if (tokens.length === 0) return true;
 
+        const modelCodes = this.extractModelCodes(searchQuery);
+        if (modelCodes.length > 0) {
+            // For model searches, relaxed mode should still preserve model intent.
+            return modelCodes.some(code => this.titleContainsModelCode(title, code));
+        }
+
         const meaningfulTokens = tokens.filter(token => token.length >= 2);
         if (meaningfulTokens.length === 0) return true;
 
@@ -210,6 +280,10 @@ class RecommendationEngine {
         }
 
         const strictFilteredProducts = products.filter(product => {
+            if (!this.matchesQueryCategory(product.title, searchQuery)) {
+                return false;
+            }
+
             if (!this.isRelevantToQuery(product.title, searchQuery)) {
                 return false;
             }
@@ -228,6 +302,10 @@ class RecommendationEngine {
         const filteredProducts = strictFilteredProducts.length > 0
             ? strictFilteredProducts
             : products.filter(product => {
+                if (!this.matchesQueryCategory(product.title, searchQuery)) {
+                    return false;
+                }
+
                 if (this.isAccessory(product.title)) {
                     return false;
                 }
