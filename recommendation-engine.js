@@ -101,7 +101,8 @@ class RecommendationEngine {
 
     extractModelCodes(text) {
         return this.extractQueryTokens(text)
-            .filter(token => /[a-z]/i.test(token) && /\d/.test(token) && token.length >= 5);
+            // Accept short model codes too: s23, a55, m14, x6, etc.
+            .filter(token => /[a-z]/i.test(token) && /\d/.test(token) && token.length >= 2);
     }
 
     isAccessory(productTitle) {
@@ -168,9 +169,39 @@ class RecommendationEngine {
         }
 
         const matchedCount = meaningfulTokens.filter(token => title.includes(token)).length;
-        const requiredMatches = meaningfulTokens.length === 1 ? 1 : Math.min(2, meaningfulTokens.length);
+        const requiredMatches = meaningfulTokens.length === 1
+            ? 1
+            : Math.max(1, Math.floor(meaningfulTokens.length * 0.5));
 
         return matchedCount >= requiredMatches;
+    }
+
+    passesBasicFilters(product, filters = {}) {
+        if (filters.maxPrice && Number(product.price) > filters.maxPrice) {
+            return false;
+        }
+
+        if (filters.minRating && Number(product.rating || 0) < filters.minRating) {
+            return false;
+        }
+
+        if (filters.inStock && !product.inStock) {
+            return false;
+        }
+
+        return true;
+    }
+
+    isRelaxedRelevant(productTitle, searchQuery) {
+        const title = String(productTitle || '').toLowerCase();
+        const tokens = this.extractQueryTokens(searchQuery);
+        if (tokens.length === 0) return true;
+
+        const meaningfulTokens = tokens.filter(token => token.length >= 2);
+        if (meaningfulTokens.length === 0) return true;
+
+        // Relaxed mode: at least one meaningful token should match.
+        return meaningfulTokens.some(token => title.includes(token));
     }
 
     recommendProducts(products, searchQuery, filters = {}) {
@@ -178,7 +209,7 @@ class RecommendationEngine {
             return [];
         }
 
-        const filteredProducts = products.filter(product => {
+        const strictFilteredProducts = products.filter(product => {
             if (!this.isRelevantToQuery(product.title, searchQuery)) {
                 return false;
             }
@@ -191,20 +222,22 @@ class RecommendationEngine {
                 return false;
             }
 
-            if (filters.maxPrice && Number(product.price) > filters.maxPrice) {
-                return false;
-            }
-
-            if (filters.minRating && Number(product.rating || 0) < filters.minRating) {
-                return false;
-            }
-
-            if (filters.inStock && !product.inStock) {
-                return false;
-            }
-
-            return true;
+            return this.passesBasicFilters(product, filters);
         });
+
+        const filteredProducts = strictFilteredProducts.length > 0
+            ? strictFilteredProducts
+            : products.filter(product => {
+                if (this.isAccessory(product.title)) {
+                    return false;
+                }
+
+                if (!this.isRelaxedRelevant(product.title, searchQuery)) {
+                    return false;
+                }
+
+                return this.passesBasicFilters(product, filters);
+            });
 
         if (filteredProducts.length === 0) {
             return [];
