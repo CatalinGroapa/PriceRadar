@@ -50,6 +50,8 @@ export default function HomePage({ user }) {
   const [showWishlist, setShowWishlist] = useState(false)
   // 'welcome' | 'noResults' | 'error' | null
   const [emptyState, setEmptyState] = useState('welcome')
+  // AI query interpretation result
+  const [aiInsight, setAiInsight] = useState(null)
 
   const resultsSectionRef = useRef(null)
 
@@ -165,6 +167,23 @@ export default function HomePage({ user }) {
     }
   }, [filters, products, query, applyFiltersAndDisplay])
 
+  // --- AI Query Interpretation ---
+  async function interpretQuery(rawQuery) {
+    try {
+      const apiBase = scraper.current.apiBaseUrl
+      const res = await fetch(`${apiBase}/interpret-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: rawQuery }),
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return await res.json()
+    } catch {
+      return { searchTerms: [rawQuery], intent: rawQuery, language: 'ro', fallback: true }
+    }
+  }
+
   // --- Search ---
   async function performSearch(overrideQuery) {
     const q = (overrideQuery !== undefined ? overrideQuery : query).trim()
@@ -177,9 +196,16 @@ export default function HomePage({ user }) {
     setLoading(true)
     setEmptyState(null)
     setScoredResults([])
+    setAiInsight(null)
 
     try {
-      const rawProducts = await scraper.current.scrapeAllStores(q)
+      // Step 1: AI interprets the query (any language → optimized search terms)
+      const insight = await interpretQuery(q)
+      setAiInsight(insight)
+      const searchTerm = insight.searchTerms?.[0] || q
+
+      // Step 2: Scrape stores with the AI-enhanced search term
+      const rawProducts = await scraper.current.scrapeAllStores(searchTerm)
       const normalizedProducts = rawProducts.map((product, index) => normalizeProduct(product, index))
 
       if (normalizedProducts.length === 0) {
@@ -191,9 +217,9 @@ export default function HomePage({ user }) {
       setProducts(normalizedProducts)
 
       // Small delay for AI processing effect
-      await new Promise((resolve) => setTimeout(resolve, 800))
+      await new Promise((resolve) => setTimeout(resolve, 600))
 
-      applyFiltersAndDisplay(normalizedProducts, q, filters)
+      applyFiltersAndDisplay(normalizedProducts, searchTerm, filters)
     } catch (error) {
       console.error('Error during search:', error)
       setLoading(false)
@@ -229,6 +255,12 @@ export default function HomePage({ user }) {
     ? `${scoredResults.length} produse găsite în ${new Set(scoredResults.map((p) => p.store)).size} magazine`
     : ''
 
+  // Language flag for AI insight chip
+  function langFlag(lang) {
+    const flags = { ro: '🇷🇴', en: '🇬🇧', ru: '🇷🇺' }
+    return flags[lang] || '🌐'
+  }
+
   return (
     <>
       <Header
@@ -256,10 +288,52 @@ export default function HomePage({ user }) {
 
       <main className="main-content">
         <div className="content-wrap">
+
+          {/* AI Insight chip — shown while loading or when results are displayed */}
+          {aiInsight && (loading || scoredResults.length > 0) && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.55rem 1rem',
+              margin: '0 0 1rem 0',
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12))',
+              border: '1px solid rgba(99,102,241,0.25)',
+              borderRadius: '0.75rem',
+              fontSize: '0.875rem',
+              color: 'var(--text-secondary)',
+              flexWrap: 'wrap',
+              rowGap: '0.25rem',
+            }}>
+              <span style={{ fontSize: '1rem' }}>🧠</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                {langFlag(aiInsight.language)} Am înțeles:
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {aiInsight.intent}
+              </span>
+              {aiInsight.searchTerms?.[0] && aiInsight.searchTerms[0] !== aiInsight.intent && (
+                <span style={{
+                  marginLeft: 'auto',
+                  background: 'rgba(99,102,241,0.15)',
+                  color: 'var(--primary-color)',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '0.4rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 500,
+                }}>
+                  🔍 {aiInsight.searchTerms[0]}
+                </span>
+              )}
+            </div>
+          )}
+
           {loading && (
             <div id="loadingState" className="loading-state">
               <div className="spinner"></div>
-              <p className="loading-state__text">Analizez produsele cu AI…</p>
+              <p className="loading-state__text">
+                {aiInsight ? 'Caut produse în magazine…' : 'Înțeleg ce cauți…'}
+              </p>
               <p className="loading-state__sub">
                 Caut în Darwin 🦎, Cactus 🌵, Bomba 💣 și PandaShop 🐼
               </p>

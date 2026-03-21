@@ -460,6 +460,84 @@ app.get('/search', async (req, res) => {
     }
 });
 
+// ─── NLP Query Interpretation ────────────────────────────────────────────────
+// Receives a query in any language (RO/EN/RU), returns optimized search terms
+app.post('/interpret-query', async (req, res) => {
+    const { query } = req.body || {};
+    if (!query || !query.trim()) {
+        return res.status(400).json({ error: 'Query required' });
+    }
+
+    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:3b';
+
+    const systemPrompt =
+        'You are a product search assistant for Moldovan e-commerce stores (Darwin, Cactus, Bomba, PandaShop). ' +
+        'The user may type in Romanian, English, or Russian. ' +
+        'Your job: understand what product they want to buy and return optimized search terms. ' +
+        'RULES: ' +
+        '- searchTerms: array of 1-3 best search terms (keep brand names & model numbers exactly as written on store sites). ' +
+        '- intent: short description in Romanian of what user wants, max 8 words. ' +
+        '- category: one of telefon, laptop, tableta, televizor, audio, electrocasnic, alt. ' +
+        '- language: detected input language: ro, en, ru, or other. ' +
+        'Return ONLY valid JSON, no markdown, no explanation. ' +
+        'Format: {"searchTerms":["term1","term2"],"intent":"descriere","category":"categorie","language":"ro"}';
+
+    const userPrompt = `User query: "${query.trim()}"\n\nReturn JSON:`;
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: OLLAMA_MODEL,
+                stream: false,
+                options: { temperature: 0.1 },
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ]
+            })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
+
+        const payload = await response.json();
+        const content = payload?.message?.content || '';
+        console.log(`🧠 interpret-query result: ${content.slice(0, 200)}`);
+
+        const jsonText = extractFirstJsonObject(content);
+        if (!jsonText) throw new Error('No JSON in Ollama response');
+
+        const parsed = JSON.parse(jsonText);
+
+        return res.json({
+            searchTerms: Array.isArray(parsed.searchTerms) && parsed.searchTerms.length > 0
+                ? parsed.searchTerms
+                : [query.trim()],
+            intent: parsed.intent || query.trim(),
+            category: parsed.category || 'alt',
+            language: parsed.language || 'ro',
+            fallback: false
+        });
+    } catch (err) {
+        console.warn(`⚠️  interpret-query fallback (${err.message})`);
+        return res.json({
+            searchTerms: [query.trim()],
+            intent: query.trim(),
+            category: 'alt',
+            language: 'ro',
+            fallback: true
+        });
+    }
+});
+
 app.get('/image-proxy', async (req, res) => {
     const rawUrl = String(req.query.url || '').trim();
 
