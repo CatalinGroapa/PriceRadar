@@ -38,6 +38,16 @@ export class ProductScraper {
                     image: '.product-image img'
                 }
             },
+            ultra: {
+                name: 'Ultra',
+                url: 'https://ultra.md',
+                selectors: {
+                    product: '.product-card',
+                    title: '.product-card__title',
+                    price: '.product-card__current-price',
+                    image: '.product-card__image'
+                }
+            },
             pandashop: {
                 name: 'PandaShop',
                 url: 'https://www.pandashop.md',
@@ -307,6 +317,53 @@ export class ProductScraper {
         }
     }
 
+    // Scrape pentru Ultra.md
+    async scrapeUltra(searchQuery) {
+        console.log('Scraping Ultra.md...');
+        const searchUrl = `${this.stores.ultra.url}/search?search=${encodeURIComponent(searchQuery)}`;
+        try {
+            const html = await this.fetchWithProxy(searchUrl);
+            if (!html) return this.simulateUltraProducts(searchQuery);
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const items = Array.from(doc.querySelectorAll(this.stores.ultra.selectors.product));
+            if (items.length === 0) return this.simulateUltraProducts(searchQuery);
+
+            return items.map((el, i) => {
+                const titleEl = el.querySelector(this.stores.ultra.selectors.title);
+                const priceEl = el.querySelector(this.stores.ultra.selectors.price);
+                const imgEl = el.querySelector(this.stores.ultra.selectors.image);
+                const linkEl = el.querySelector('a.product-card__link') || el.querySelector('a');
+
+                let image = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '';
+                let productUrl = linkEl ? (linkEl.getAttribute('href') || '') : '';
+                if (image && image.startsWith('//')) image = 'https:' + image;
+                if (image && image.startsWith('/')) image = this.stores.ultra.url + image;
+                if (productUrl && productUrl.startsWith('/')) productUrl = this.stores.ultra.url + productUrl;
+
+                return {
+                    id: `ultra_scraped_${i}`,
+                    title: titleEl ? titleEl.textContent.trim() : (el.textContent || '').trim(),
+                    description: '',
+                    price: priceEl ? this.extractPrice(priceEl.textContent) : 0,
+                    rating: 0,
+                    reviewCount: 0,
+                    store: 'Ultra',
+                    storeUrl: this.stores.ultra.url,
+                    productUrl: productUrl || this.stores.ultra.url,
+                    image: image || 'https://via.placeholder.com/400x300/1e293b/6366f1?text=Produs',
+                    inStock: !/indisponibil|stoc epuizat/i.test(el.textContent || ''),
+                    reviews: [],
+                    specs: []
+                };
+            });
+        } catch (err) {
+            console.warn('Ultra scrape failed, falling back to simulated data', err);
+            return this.simulateUltraProducts(searchQuery);
+        }
+    }
+
     // Funcție principală care scrapuiește toate magazinele
     async scrapeAllStores(searchQuery) {
         console.log(`Searching for: "${searchQuery}" in all stores...`);
@@ -315,7 +372,7 @@ export class ProductScraper {
         // Încearcă să folosească backend-ul local Puppeteer
         try {
             console.log('🚀 Încercăm backend-ul Puppeteer...');
-            const response = await fetch(`${this.apiBaseUrl}/search?q=${encodeURIComponent(searchQuery)}&ai=1`);
+            const response = await fetch(`${this.apiBaseUrl}/search?q=${encodeURIComponent(searchQuery)}`);
             
             console.log(`📡 Response status: ${response.status}`);
             
@@ -339,6 +396,7 @@ export class ProductScraper {
             this.scrapeDarwin(searchQuery),
             this.scrapeCactus(searchQuery),
             this.scrapeBomba(searchQuery),
+            this.scrapeUltra(searchQuery),
             this.scrapePandaShop(searchQuery)
         ]);
 
@@ -558,6 +616,61 @@ export class ProductScraper {
                 inStock: true,
                 reviews: ['Gaming foarte bun pentru preț', 'Performanțe solide', 'Recomand'],
                 specs: ['Intel Core i5-11400H', '16GB RAM', '512GB SSD', 'RTX 3050 4GB']
+            }
+        ];
+
+        return products.filter(p => 
+            p.title.toLowerCase().includes(query.toLowerCase()) ||
+            p.description.toLowerCase().includes(query.toLowerCase())
+        );
+    }
+
+    simulateUltraProducts(query) {
+        const products = [
+            {
+                id: 'ultra_1',
+                title: 'Laptop Apple MacBook Air 13 2025, 16GB RAM, 512GB SSD',
+                description: 'Laptop premium Apple cu autonomie mare, ecran luminos si performanta excelenta pentru lucru zilnic.',
+                price: 23999,
+                rating: 4.9,
+                reviewCount: 112,
+                store: 'Ultra',
+                storeUrl: 'https://ultra.md',
+                productUrl: 'https://ultra.md/search?search=macbook',
+                image: 'https://via.placeholder.com/400x300/1e293b/60a5fa?text=MacBook+Air',
+                inStock: true,
+                reviews: ['Foarte rapid', 'Constructie premium', 'Baterie excelenta'],
+                specs: ['Apple M4', '16GB RAM', '512GB SSD', '13.6 inch']
+            },
+            {
+                id: 'ultra_2',
+                title: 'Laptop ASUS Zenbook A14 OLED UX3407QA, 16GB RAM, 512GB SSD',
+                description: 'Ultrabook subtire cu ecran OLED si autonomie foarte buna, potrivit pentru mobilitate si productivitate.',
+                price: 20990,
+                rating: 4.7,
+                reviewCount: 74,
+                store: 'Ultra',
+                storeUrl: 'https://ultra.md',
+                productUrl: 'https://ultra.md/search?search=zenbook',
+                image: 'https://via.placeholder.com/400x300/1e293b/f59e0b?text=ASUS+Zenbook',
+                inStock: true,
+                reviews: ['Ecran superb', 'Usor si silentios'],
+                specs: ['Snapdragon X', '16GB RAM', '512GB SSD', 'OLED']
+            },
+            {
+                id: 'ultra_3',
+                title: 'Laptop Lenovo IdeaPad Slim 3 15IRH10, 16GB RAM, 512GB SSD',
+                description: 'Laptop echilibrat pentru office, studiu si multitasking, cu raport bun intre pret si specificatii.',
+                price: 13390,
+                rating: 4.4,
+                reviewCount: 51,
+                store: 'Ultra',
+                storeUrl: 'https://ultra.md',
+                productUrl: 'https://ultra.md/search?search=ideapad',
+                image: 'https://via.placeholder.com/400x300/1e293b/34d399?text=IdeaPad+Slim+3',
+                inStock: true,
+                reviews: ['Bun pentru facultate', 'Merge fluent'],
+                specs: ['Intel Core', '16GB RAM', '512GB SSD', '15.6 inch']
             }
         ];
 

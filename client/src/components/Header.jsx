@@ -19,6 +19,7 @@ export default function Header({ user, wishlistCount, onWishlistClick, onLogout 
             <span className="store-badge">🦎 Darwin</span>
             <span className="store-badge">🌵 Cactus</span>
             <span className="store-badge">💣 Bomba</span>
+            <span className="store-badge">⚡ Ultra</span>
             <span className="store-badge">🐼 PandaShop</span>
           </div>
           <div className="header-user">

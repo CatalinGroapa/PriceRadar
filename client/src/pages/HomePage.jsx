@@ -34,6 +34,7 @@ export default function HomePage({ user }) {
   const [products, setProducts] = useState([]) // raw normalized products
   const [scoredResults, setScoredResults] = useState([])
   const [filters, setFilters] = useState({
+    store: 'all',
     maxPrice: '',
     minRating: '0',
     inStock: false,
@@ -138,6 +139,7 @@ export default function HomePage({ user }) {
   const applyFiltersAndDisplay = useCallback(
     (prods, q, filt) => {
       const parsedFilters = {
+        store: filt.store || 'all',
         maxPrice: filt.maxPrice ? parseFloat(filt.maxPrice) : null,
         minRating: parseFloat(filt.minRating),
         inStock: filt.inStock,
@@ -261,7 +263,7 @@ export default function HomePage({ user }) {
               <div className="spinner"></div>
               <p className="loading-state__text">Analizez produsele cu AI…</p>
               <p className="loading-state__sub">
-                Caut în Darwin 🦎, Cactus 🌵, Bomba 💣 și PandaShop 🐼
+                Caut în Darwin 🦎, Cactus 🌵, Bomba 💣, Ultra ⚡ și PandaShop 🐼
               </p>
             </div>
           )}
@@ -289,7 +291,7 @@ export default function HomePage({ user }) {
               <svg className="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              <p>Căutăm produsele în <strong>Darwin, Cactus, Bomba și PandaShop</strong></p>
+              <p>Căutăm produsele în <strong>Darwin, Cactus, Bomba, Ultra și PandaShop</strong></p>
               <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)' }}>
                 Prețuri în <strong>Lei MDL</strong> • Analiză AI • Comparare automată
               </p>

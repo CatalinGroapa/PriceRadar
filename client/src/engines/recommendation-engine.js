@@ -269,6 +269,10 @@ export class RecommendationEngine {
     }
 
     passesBasicFilters(product, filters = {}) {
+        if (filters.store && filters.store !== 'all' && product.store !== filters.store) {
+            return false;
+        }
+
         if (filters.maxPrice && Number(product.price) > filters.maxPrice) {
             return false;
         }

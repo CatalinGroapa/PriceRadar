@@ -17,6 +17,8 @@ const allowedImageHosts = new Set([
     'www.cactus.md',
     'cactus.md',
     'bomba.md',
+    'ultra.md',
+    'cdn.ultra.md',
     'pandashop.md',
     'www.pandashop.md',
     'cdn.pandashop.md'
@@ -37,8 +39,122 @@ function extractFirstJsonObject(text) {
     return text.slice(start, end + 1);
 }
 
+function buildFallbackInterpretation(query) {
+    const normalizedQuery = String(query || '').trim();
+    const compactQuery = normalizedQuery.replace(/\s+/g, ' ');
+    const searchTerms = compactQuery ? [compactQuery] : [];
+    const isRomanian = /[ăâîșşțţ]|\b(cu|si|și|pentru|telefon|laptop|pret|preț)\b/i.test(compactQuery);
+
+    return {
+        searchTerms,
+        intent: compactQuery,
+        language: isRomanian ? 'ro' : 'en',
+        fallback: true
+    };
+}
+
+function normalizeText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isLikelyAccessory(query, title) {
+    const normalizedTitle = normalizeText(title);
+    const normalizedQuery = normalizeText(query);
+
+    if (!normalizedTitle || !normalizedQuery) return false;
+
+    const accessoryKeywords = [
+        'husa', 'huse', 'case', 'cover', 'wallet', 'folio', 'bumper',
+        'sticla', 'sticla de protectie', 'tempered glass', 'glass',
+        'screen protector', 'protector', 'privacy glass',
+        'cablu', 'cable', 'charger', 'incarcator', 'adapter',
+        'earbuds', 'headphones', 'casti', 'headset',
+        'holder', 'stand', 'mount', 'dock',
+        'battery', 'power bank', 'stylus', 'pen',
+        'skin', 'film', 'lens protector', 'ring', 'strap'
+    ];
+
+    const queryTokens = normalizedQuery.split(/\s+/).filter((token) => token.length > 1);
+    const titleContainsQuerySignal = queryTokens.some((token) => normalizedTitle.includes(token));
+    const hasAccessoryKeyword = accessoryKeywords.some((keyword) => normalizedTitle.includes(keyword));
+
+    return titleContainsQuerySignal && hasAccessoryKeyword;
+}
+
+async function interpretQueryWithAi(query) {
+    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:3b';
+    const fallback = buildFallbackInterpretation(query);
+
+    const systemPrompt =
+        'You interpret ecommerce search queries. ' +
+        'Return ONLY valid JSON with this shape: ' +
+        '{"searchTerms":["..."],"intent":"...","language":"ro|en","fallback":false}. ' +
+        'Keep searchTerms short, practical, and focused on the main product.';
+
+    const userPrompt =
+        `User query: "${query}"\n` +
+        'Infer the main buying intent, normalize the search terms, and detect language. ' +
+        'Return JSON only.';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+        const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: OLLAMA_MODEL,
+                stream: false,
+                options: { temperature: 0.1 },
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ]
+            })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            return fallback;
+        }
+
+        const payload = await response.json();
+        const content = payload?.message?.content || '';
+        const jsonText = extractFirstJsonObject(content);
+
+        if (!jsonText) {
+            return fallback;
+        }
+
+        const parsed = JSON.parse(jsonText);
+        const parsedSearchTerms = Array.isArray(parsed?.searchTerms)
+            ? parsed.searchTerms.map((term) => String(term || '').trim()).filter(Boolean)
+            : [];
+
+        return {
+            searchTerms: parsedSearchTerms.length > 0 ? parsedSearchTerms.slice(0, 3) : fallback.searchTerms,
+            intent: String(parsed?.intent || fallback.intent).trim() || fallback.intent,
+            language: parsed?.language === 'ro' ? 'ro' : fallback.language,
+            fallback: false
+        };
+    } catch (error) {
+        console.warn(`⚠️ interpretQueryWithAi fallback: ${error.message}`);
+        return fallback;
+    }
+}
+
 async function aiFilterProducts(query, products) {
     if (!Array.isArray(products) || products.length === 0) return products;
+
+    const heuristicFiltered = products.filter((product) => !isLikelyAccessory(query, product.title));
+    const candidateProducts = heuristicFiltered.length > 0 ? heuristicFiltered : products;
 
     const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:3b';
@@ -47,8 +163,8 @@ async function aiFilterProducts(query, products) {
     const BATCH_SIZE = 40;
     const relevantIds = new Set();
 
-    for (let i = 0; i < products.length; i += BATCH_SIZE) {
-        const batch = products.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < candidateProducts.length; i += BATCH_SIZE) {
+        const batch = candidateProducts.slice(i, i + BATCH_SIZE);
         const candidates = batch.map((p) => ({ id: p.id, title: p.title }));
 
         const systemPrompt =
@@ -117,9 +233,9 @@ async function aiFilterProducts(query, products) {
         }
     }
 
-    const filtered = products.filter((p) => relevantIds.has(p.id));
-    console.log(`🤖 Ollama filtru: ${products.length} → ${filtered.length} produse relevante`);
-    return filtered.length > 0 ? filtered : products;
+    const filtered = candidateProducts.filter((p) => relevantIds.has(p.id));
+    console.log(`🤖 Ollama filtru: ${products.length} → ${candidateProducts.length} → ${filtered.length} produse relevante`);
+    return filtered.length > 0 ? filtered : candidateProducts;
 }
 
 // Funcție helper pentru delay între request-uri
@@ -169,6 +285,18 @@ const storeConfigs = {
             price: '.product-price .price',
             image: '.product__photo img',
             link: 'a.name'
+        }
+    },
+    ultra: {
+        name: 'Ultra.md',
+        icon: '⚡',
+        searchUrl: (query) => `https://ultra.md/search?search=${encodeURIComponent(query)}`,
+        selectors: {
+            productCard: '.product-card',
+            title: '.product-card__title',
+            price: '.product-card__current-price',
+            image: '.product-card__image',
+            link: 'a.product-card__link'
         }
     },
     panda: {
@@ -373,6 +501,17 @@ async function scrapeStore(browser, storeName, query, config) {
 }
 
 // Endpoint principal de căutare
+app.post('/interpret-query', async (req, res) => {
+    const query = String(req.body?.query || '').trim();
+
+    if (!query) {
+        return res.status(400).json({ error: 'Body field "query" is required' });
+    }
+
+    const interpretation = await interpretQueryWithAi(query);
+    res.json(interpretation);
+});
+
 app.get('/search', async (req, res) => {
     const query = req.query.q;
     const useAiRerank = String(req.query.ai || '').trim() === '1';

@@ -4,6 +4,7 @@ const storeEmoji = {
   Darwin: '🦎',
   Cactus: '🌵',
   Bomba: '💣',
+  Ultra: '⚡',
   PandaShop: '🐼',
 }
 

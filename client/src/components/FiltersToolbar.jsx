@@ -8,6 +8,25 @@ export default function FiltersToolbar({ filters, onChange, resultsCount, show }
       <div className="content-wrap">
         <div className="filters">
           <div className="filter-group">
+            <label htmlFor="storeFilter" className="filter-group__label">Magazin</label>
+            <select
+              id="storeFilter"
+              className="filter-group__select"
+              value={filters.store || 'all'}
+              onChange={(e) => onChange({ ...filters, store: e.target.value })}
+            >
+              <option value="all">Toate</option>
+              <option value="Darwin">Darwin</option>
+              <option value="Cactus">Cactus</option>
+              <option value="Bomba">Bomba</option>
+              <option value="Ultra">Ultra</option>
+              <option value="PandaShop">PandaShop</option>
+            </select>
+          </div>
+
+          <div className="filter-separator"></div>
+
+          <div className="filter-group">
             <label htmlFor="priceRange" className="filter-group__label">Buget max</label>
             <input
               type="number"
