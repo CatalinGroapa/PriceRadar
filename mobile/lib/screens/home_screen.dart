@@ -268,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Row(
                               children: [
                                 const Text(
-                                  'PulsePrice',
+                                  'PriceRadar',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 20,

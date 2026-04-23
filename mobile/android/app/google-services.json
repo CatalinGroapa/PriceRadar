@@ -1,26 +1,65 @@
 {
   "project_info": {
-    "project_number": "611789130385",
-    "project_id": "testing-8c39c",
-    "storage_bucket": "testing-8c39c.firebasestorage.app"
+    "project_number": "598518435359",
+    "project_id": "pulceprice",
+    "storage_bucket": "pulceprice.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:611789130385:android:bfe56547c79662462ecd30",
+        "mobilesdk_app_id": "1:598518435359:android:80ce911d511e5cb36a8f2a",
         "android_client_info": {
-          "package_name": "com.pulseprice.pulseprice"
+          "package_name": "Pulse.Price"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "598518435359-m4gf2o37passcemg48qttr198rul26bf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyAuD1usN95AJxj5m34-_6M-COSxgZ1calI"
+          "current_key": "AIzaSyAXyIE7hQEI8elZcos7Mc3j5AR2cj_Ulqk"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "598518435359-737c3j4gle7aifq8eq5j172vbe4gj4p2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:598518435359:android:abb7d28a4577ce386a8f2a",
+        "android_client_info": {
+          "package_name": "com.pulseprice.pulseprice"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "598518435359-m4gf2o37passcemg48qttr198rul26bf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXyIE7hQEI8elZcos7Mc3j5AR2cj_Ulqk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "598518435359-737c3j4gle7aifq8eq5j172vbe4gj4p2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

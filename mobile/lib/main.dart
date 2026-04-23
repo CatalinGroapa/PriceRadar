@@ -14,9 +14,15 @@ void main() async {
     statusBarIconBrightness: Brightness.dark,
     statusBarBrightness: Brightness.light,
   ));
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on FirebaseException catch (error) {
+    if (error.code != 'duplicate-app') {
+      rethrow;
+    }
+  }
   runApp(const PulsePriceApp());
 }
 
@@ -26,7 +32,7 @@ class PulsePriceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PulsePrice',
+      title: 'PriceRadar',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: StreamBuilder<User?>(

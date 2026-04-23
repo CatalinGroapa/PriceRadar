@@ -50,11 +50,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAuD1usN95AJxj5m34-_6M-COSxgZ1calI',
-    appId: '1:611789130385:android:bfe56547c79662462ecd30',
-    messagingSenderId: '611789130385',
-    projectId: 'testing-8c39c',
-    storageBucket: 'testing-8c39c.firebasestorage.app',
+    apiKey: 'AIzaSyAXyIE7hQEI8elZcos7Mc3j5AR2cj_Ulqk',
+    appId: '1:598518435359:android:abb7d28a4577ce386a8f2a',
+    messagingSenderId: '598518435359',
+    projectId: 'pulceprice',
+    storageBucket: 'pulceprice.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
