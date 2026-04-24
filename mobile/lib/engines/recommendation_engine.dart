@@ -353,6 +353,11 @@ class RecommendationEngine {
       };
 
   bool passesBasicFilters(Product product, Map<String, dynamic> filters) {
+    final minPrice = filters['minPrice'];
+    if (minPrice != null && product.price < (minPrice as num).toDouble()) {
+      return false;
+    }
+
     final maxPrice = filters['maxPrice'];
     if (maxPrice != null && product.price > (maxPrice as num).toDouble()) {
       return false;

@@ -10,6 +10,7 @@ class WishlistModal extends StatelessWidget {
   final VoidCallback onClose;
   final void Function(WishlistItem) onRemove;
   final VoidCallback onClearAll;
+  final void Function(WishlistItem) onItemTap;
 
   const WishlistModal({
     super.key,
@@ -18,6 +19,7 @@ class WishlistModal extends StatelessWidget {
     required this.onClose,
     required this.onRemove,
     required this.onClearAll,
+    required this.onItemTap,
   });
 
   Future<void> _openUrl(String? url) async {
@@ -99,182 +101,185 @@ class WishlistModal extends StatelessWidget {
                             itemCount: wishlist.length,
                             itemBuilder: (context, index) {
                               final item = wishlist[index];
-                              return Container(
-                                margin:
-                                    const EdgeInsets.only(bottom: 12),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: AppColors.background,
-                                  borderRadius:
-                                      BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: AppColors.borderColor),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.04),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                      child: CachedNetworkImage(
-                                        imageUrl: item.image,
-                                        width: 64,
-                                        height: 64,
-                                        fit: BoxFit.contain,
-                                        placeholder: (_, __) =>
-                                            Container(
+                              return GestureDetector(
+                                onTap: () => onItemTap(item),
+                                child: Container(
+                                  margin:
+                                      const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.background,
+                                    borderRadius:
+                                        BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: AppColors.borderColor),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.04),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                          imageUrl: item.image,
                                           width: 64,
                                           height: 64,
-                                          color: AppColors.surface,
-                                        ),
-                                        errorWidget:
-                                            (_, __, ___) =>
-                                                Container(
-                                          width: 64,
-                                          height: 64,
-                                          color: AppColors.surface,
-                                          child: const Icon(
-                                            Icons
-                                                .image_not_supported,
-                                            color:
-                                                AppColors.textMuted,
-                                            size: 20,
+                                          fit: BoxFit.contain,
+                                          placeholder: (_, __) =>
+                                              Container(
+                                            width: 64,
+                                            height: 64,
+                                            color: AppColors.surface,
+                                          ),
+                                          errorWidget:
+                                              (_, __, ___) =>
+                                                  Container(
+                                            width: 64,
+                                            height: 64,
+                                            color: AppColors.surface,
+                                            child: const Icon(
+                                              Icons
+                                                  .image_not_supported,
+                                              color:
+                                                  AppColors.textMuted,
+                                              size: 20,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment
-                                                .start,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment
+                                                  .start,
+                                          children: [
+                                            Text(
+                                              item.title,
+                                              maxLines: 2,
+                                              overflow: TextOverflow
+                                                  .ellipsis,
+                                              style: const TextStyle(
+                                                color: AppColors
+                                                    .textPrimary,
+                                                fontSize: 14,
+                                                fontWeight:
+                                                    FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              item.store
+                                                  .toUpperCase(),
+                                              style: const TextStyle(
+                                                color: AppColors
+                                                    .textMuted,
+                                                fontSize: 11,
+                                                letterSpacing: 0.8,
+                                                fontWeight:
+                                                    FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              formatPrice(item.price),
+                                              style: const TextStyle(
+                                                color: AppColors
+                                                    .textPrimary,
+                                                fontSize: 15,
+                                                fontWeight:
+                                                    FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Column(
                                         children: [
-                                          Text(
-                                            item.title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow
-                                                .ellipsis,
-                                            style: const TextStyle(
-                                              color: AppColors
-                                                  .textPrimary,
-                                              fontSize: 14,
-                                              fontWeight:
-                                                  FontWeight.w600,
+                                          SizedBox(
+                                            width: 80,
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  _openUrl(item
+                                                      .productUrl),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 8),
+                                                decoration:
+                                                    BoxDecoration(
+                                                  color: AppColors
+                                                      .primary,
+                                                  borderRadius:
+                                                      BorderRadius
+                                                          .circular(
+                                                              8),
+                                                ),
+                                                child: const Center(
+                                                  child: Text(
+                                                    'Produs',
+                                                    style: TextStyle(
+                                                      color: Colors
+                                                          .white,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight
+                                                              .w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
                                             ),
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            item.store
-                                                .toUpperCase(),
-                                            style: const TextStyle(
-                                              color: AppColors
-                                                  .textMuted,
-                                              fontSize: 11,
-                                              letterSpacing: 0.8,
-                                              fontWeight:
-                                                  FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            formatPrice(item.price),
-                                            style: const TextStyle(
-                                              color: AppColors
-                                                  .textPrimary,
-                                              fontSize: 15,
-                                              fontWeight:
-                                                  FontWeight.w700,
+                                          const SizedBox(height: 6),
+                                          SizedBox(
+                                            width: 80,
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  onRemove(item),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets
+                                                        .symmetric(
+                                                        vertical: 8),
+                                                decoration:
+                                                    BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius
+                                                          .circular(
+                                                              8),
+                                                  border: Border.all(
+                                                      color: AppColors
+                                                          .borderColor),
+                                                ),
+                                                child: const Center(
+                                                  child: Text(
+                                                    'Elimina',
+                                                    style: TextStyle(
+                                                      color: AppColors
+                                                          .textMuted,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight
+                                                              .w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Column(
-                                      children: [
-                                        SizedBox(
-                                          width: 80,
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                _openUrl(item
-                                                    .productUrl),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets
-                                                      .symmetric(
-                                                      vertical: 8),
-                                              decoration:
-                                                  BoxDecoration(
-                                                color: AppColors
-                                                    .primary,
-                                                borderRadius:
-                                                    BorderRadius
-                                                        .circular(
-                                                            8),
-                                              ),
-                                              child: const Center(
-                                                child: Text(
-                                                  'Produs',
-                                                  style: TextStyle(
-                                                    color: Colors
-                                                        .white,
-                                                    fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight
-                                                            .w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        SizedBox(
-                                          width: 80,
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                onRemove(item),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets
-                                                      .symmetric(
-                                                      vertical: 8),
-                                              decoration:
-                                                  BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius
-                                                        .circular(
-                                                            8),
-                                                border: Border.all(
-                                                    color: AppColors
-                                                        .borderColor),
-                                              ),
-                                              child: const Center(
-                                                child: Text(
-                                                  'Elimina',
-                                                  style: TextStyle(
-                                                    color: AppColors
-                                                        .textMuted,
-                                                    fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight
-                                                            .w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               );
                             },

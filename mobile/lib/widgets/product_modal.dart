@@ -27,19 +27,36 @@ class ProductModal extends StatelessWidget {
     required this.onClose,
   });
 
-  static const Map<String, String> _scoreKeyTranslations = {
-    'price': 'Pret',
-    'rating': 'Rating',
-    'reviews': 'Recenzii',
-    'availability': 'Disponibil',
-    'relevance': 'Relevanta',
-  };
+  Uri? _normalizeUri(String? rawUrl) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return null;
+    var value = rawUrl.trim();
+    if (value.startsWith('//')) {
+      value = 'https:$value';
+    } else if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(value)) {
+      value = 'https://$value';
+    }
+    return Uri.tryParse(value);
+  }
 
-  Future<void> _openUrl(String? url) async {
-    if (url == null || url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _openUrl(BuildContext context, String? url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = _normalizeUri(url);
+    if (uri == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Link produs invalid')),
+      );
+      return;
+    }
+
+    final openedExternal =
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (openedExternal) return;
+
+    final openedFallback = await launchUrl(uri, mode: LaunchMode.platformDefault);
+    if (!openedFallback) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nu pot deschide linkul produsului')),
+      );
     }
   }
 
@@ -47,15 +64,6 @@ class ProductModal extends StatelessWidget {
   Widget build(BuildContext context) {
     final similar =
         recommendationEngine.findSimilarProducts(product, allProducts);
-    final scoreBreakdown = product.scoreBreakdown ??
-        {
-          'price': 0,
-          'rating': 0,
-          'reviews': 0,
-          'availability': product.inStock ? 100 : 0,
-          'relevance': 0,
-        };
-
     return Material(
       color: Colors.black.withValues(alpha: 0.5),
       child: SafeArea(
@@ -217,47 +225,12 @@ class ProductModal extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      // Rating, reviews, stock
+                      // Availability
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: List.generate(5, (i) {
-                              final rating = product.rating;
-                              if (i < rating.floor()) {
-                                return const Icon(Icons.star,
-                                    size: 16,
-                                    color: AppColors.primary);
-                              } else if (i < rating.ceil() &&
-                                  (rating % 1) >= 0.5) {
-                                return const Icon(Icons.star_half,
-                                    size: 16,
-                                    color: AppColors.primary);
-                              }
-                              return Icon(Icons.star_border,
-                                  size: 16,
-                                  color: AppColors.primary
-                                      .withValues(alpha: 0.3));
-                            }),
-                          ),
-                          Text(
-                            product.rating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Text('\u{00B7}',
-                              style: TextStyle(
-                                  color: AppColors.textMuted)),
-                          Text(
-                            '${product.reviewCount} recenzii',
-                            style: const TextStyle(
-                                color: AppColors.textSecondary),
-                          ),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
@@ -363,113 +336,6 @@ class ProductModal extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                       ],
-
-                      // AI Analysis breakdown
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border:
-                              Border.all(color: AppColors.borderColor),
-                        ),
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Analiza AI',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            GridView.count(
-                              crossAxisCount: 2,
-                              shrinkWrap: true,
-                              physics:
-                                  const NeverScrollableScrollPhysics(),
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 1.3,
-                              children: scoreBreakdown.entries
-                                  .where(
-                                      (e) => e.key != 'sentiment')
-                                  .map((entry) {
-                                final value =
-                                    (entry.value as num?)
-                                            ?.toInt() ??
-                                        0;
-                                return Container(
-                                  padding:
-                                      const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.background,
-                                    borderRadius:
-                                        BorderRadius.circular(10),
-                                    border: Border.all(
-                                        color: AppColors
-                                            .borderColor),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        _scoreKeyTranslations[
-                                                entry.key] ??
-                                            entry.key,
-                                        style: const TextStyle(
-                                          color: AppColors
-                                              .textMuted,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '$value%',
-                                        style: const TextStyle(
-                                          color: AppColors
-                                              .textPrimary,
-                                          fontSize: 24,
-                                          fontWeight:
-                                              FontWeight.w800,
-                                          fontFeatures: [
-                                            FontFeature
-                                                .tabularFigures()
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      ClipRRect(
-                                        borderRadius:
-                                            BorderRadius.circular(
-                                                2),
-                                        child:
-                                            LinearProgressIndicator(
-                                          value: value / 100,
-                                          backgroundColor:
-                                              AppColors
-                                                  .borderColor,
-                                          valueColor:
-                                              const AlwaysStoppedAnimation(
-                                                  AppColors
-                                                      .primary),
-                                          minHeight: 3,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
 
                       // Similar products
                       if (similar.isNotEmpty) ...[
@@ -655,6 +521,7 @@ class ProductModal extends StatelessWidget {
                             Expanded(
                               child: GestureDetector(
                                 onTap: () => _openUrl(
+                                    context,
                                     product.productUrl.isNotEmpty
                                         ? product.productUrl
                                         : product.storeUrl),

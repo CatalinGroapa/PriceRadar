@@ -32,8 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Product> _products = [];
   List<Product> _scoredResults = [];
   Map<String, dynamic> _filters = {
+    'minPrice': null,
     'maxPrice': null,
-    'minRating': 0.0,
     'inStock': false,
     'sortBy': 'score',
   };
@@ -43,7 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Product? _selectedProduct;
   bool _showWishlist = false;
   String? _emptyState = 'welcome';
-  Map<String, dynamic>? _aiInsight;
 
   @override
   void initState() {
@@ -120,10 +119,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void _applyFiltersAndDisplay(
       List<Product> prods, String q, Map<String, dynamic> filt) {
     final parsedFilters = <String, dynamic>{
+      'minPrice': filt['minPrice'] != null
+          ? double.tryParse(filt['minPrice'].toString())
+          : null,
       'maxPrice': filt['maxPrice'] != null
           ? double.tryParse(filt['maxPrice'].toString())
           : null,
-      'minRating': double.tryParse(filt['minRating'].toString()) ?? 0.0,
+      'minRating': null,
       'inStock': filt['inStock'] ?? false,
       'sortBy': filt['sortBy'] ?? 'score',
     };
@@ -202,16 +204,16 @@ class _HomeScreenState extends State<HomeScreen> {
       merged['maxPrice'] = maxPrice;
     }
 
-    final minRating = double.tryParse(aiFilters['minRating']?.toString() ?? '');
-    if (minRating != null && minRating >= 0 && minRating <= 5) {
-      merged['minRating'] = minRating;
+    final minPrice = double.tryParse(aiFilters['minPrice']?.toString() ?? '');
+    if (minPrice != null && minPrice >= 0) {
+      merged['minPrice'] = minPrice;
     }
 
     if (aiFilters['inStock'] is bool) {
       merged['inStock'] = aiFilters['inStock'];
     }
 
-    const allowedSorts = {'score', 'price-asc', 'price-desc', 'rating'};
+    const allowedSorts = {'score', 'price-asc', 'price-desc'};
     final sortBy = aiFilters['sortBy']?.toString();
     if (sortBy != null && allowedSorts.contains(sortBy)) {
       merged['sortBy'] = sortBy;
@@ -247,7 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _loading = true;
       _emptyState = null;
       _scoredResults = [];
-      _aiInsight = null;
     });
 
     try {
@@ -261,9 +262,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _filters = effectiveFilters;
-        if (interpretation['fallback'] != true) {
-          _aiInsight = interpretation;
-        }
       });
 
       final selectedSearchTerm = _selectSearchTerm(q, interpretation);
@@ -321,6 +319,36 @@ class _HomeScreenState extends State<HomeScreen> {
       _showWishlist = false;
     });
     _storageService.saveWishlist(_wishlist);
+  }
+
+  void _handleWishlistItemTap(WishlistItem item) {
+    Product? matched;
+    for (final product in [..._scoredResults, ..._products]) {
+      final sameId = product.id == item.id;
+      final sameUrl =
+          product.productUrl.isNotEmpty && product.productUrl == item.productUrl;
+      final sameTitleStore = product.title == item.title && product.store == item.store;
+      if (sameId || sameUrl || sameTitleStore) {
+        matched = product;
+        break;
+      }
+    }
+
+    matched ??= Product(
+      id: item.id,
+      title: item.title,
+      description: item.title,
+      store: item.store,
+      productUrl: item.productUrl,
+      image: item.image,
+      price: item.price,
+      inStock: false,
+    );
+
+    setState(() {
+      _showWishlist = false;
+      _selectedProduct = matched;
+    });
   }
 
   @override
@@ -472,40 +500,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // AI Insight chip
-              if (_aiInsight != null && !_loading)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.borderColor),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.auto_awesome,
-                              size: 16, color: AppColors.textMuted),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'AI: ${_aiInsight!['intent'] ?? _query}',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
               // Filters toolbar
               if (_scoredResults.isNotEmpty || _loading)
                 SliverToBoxAdapter(
@@ -636,6 +630,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onClose: () => setState(() => _showWishlist = false),
               onRemove: _handleRemoveFromWishlist,
               onClearAll: _handleClearWishlist,
+              onItemTap: _handleWishlistItemTap,
             ),
         ],
       ),
@@ -693,15 +688,6 @@ class _LoadingState extends StatelessWidget {
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Darwin \u{00B7} Cactus \u{00B7} Bomba \u{00B7} PandaShop',
-            style: TextStyle(
-              color: AppColors.textMuted.withValues(alpha: 0.6),
-              fontSize: 13,
-            ),
-            textAlign: TextAlign.center,
-          ),
         ],
       ),
     );
@@ -720,13 +706,13 @@ class _WelcomeState extends StatelessWidget {
           Icon(Icons.search, size: 48, color: AppColors.textMuted.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           const Text(
-            'Cautam in Darwin, Cactus, Bomba si PandaShop',
+            'Cauta produsul potrivit pentru tine',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Preturi in Lei MDL  /  Analiza AI  /  Comparare automata',
+            'Comparam automat preturile din magazinele partenere',
             style: TextStyle(color: AppColors.textMuted, fontSize: 13),
           ),
         ],

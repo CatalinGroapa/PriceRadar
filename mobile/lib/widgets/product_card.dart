@@ -172,49 +172,20 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    // Rating
-                    Row(
-                      children: [
-                        ...List.generate(5, (i) {
-                          final rating = widget.product.rating;
-                          if (i < rating.floor()) {
-                            return const Icon(Icons.star,
-                                size: 11, color: AppColors.primary);
-                          } else if (i < rating.ceil() &&
-                              (rating % 1) >= 0.5) {
-                            return const Icon(Icons.star_half,
-                                size: 11, color: AppColors.primary);
-                          }
-                          return Icon(Icons.star_border,
-                              size: 11,
-                              color: AppColors.primary.withValues(alpha: 0.3));
-                        }),
-                        const SizedBox(width: 3),
-                        Flexible(
-                          child: Text(
-                            '(${widget.product.reviewCount})',
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 11,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
                     // Stock status
-                    if (!widget.product.inStock)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 3),
-                        child: Text(
-                          'Indisponibil',
-                          style: TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        widget.product.inStock ? 'In stoc' : 'Indisponibil',
+                        style: TextStyle(
+                          color: widget.product.inStock
+                              ? AppColors.textSecondary
+                              : AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
+                    ),
                     const Spacer(),
                     // Separator
                     Container(
