@@ -15,8 +15,8 @@ class RecommendationEngine {
 
   final Map<String, List<String>> categoryKeywords = {
     'phone': [
-      'telefon', 'smartphone', 'iphone', 'galaxy', 'redmi', 'pixel', 'phone', 'mobil',
-      'телефон', 'смартфон', 'mobile phone'
+      'telefon', 'telefon mobil', 'smartphone', 'iphone', 'galaxy', 'redmi', 'pixel', 'phone', 'mobil',
+      'mobile phone', 'смартфон', 'телефон'
     ],
     'laptop': ['laptop', 'notebook', 'ultrabook', 'macbook'],
     'tablet': ['tableta', 'tablet', 'ipad'],
@@ -26,6 +26,21 @@ class RecommendationEngine {
       'cuptor', 'plita', 'aragaz', 'frigider', 'masina de spalat', 'boiler', 'hota', 'microunde',
       'вытяжка', 'панель', 'духовой', 'холодильник', 'плита'
     ],
+  };
+
+  final Map<String, List<String>> brandKeywords = {
+    'samsung': ['samsung', 'galaxy'],
+    'apple': ['apple', 'iphone', 'ipad', 'macbook'],
+    'xiaomi': ['xiaomi', 'redmi', 'poco'],
+    'huawei': ['huawei'],
+    'honor': ['honor'],
+    'nokia': ['nokia'],
+    'motorola': ['motorola', 'moto'],
+    'oppo': ['oppo'],
+    'realme': ['realme'],
+    'vivo': ['vivo'],
+    'oneplus': ['oneplus', 'one plus'],
+    'google': ['google', 'pixel'],
   };
 
   RecommendationEngine(this.nlpEngine);
@@ -188,23 +203,48 @@ class RecommendationEngine {
     return queryCategories.any((category) => productCategories.contains(category));
   }
 
+  Set<String> detectQueryBrands(String? searchQuery) {
+    final query = normalizeText(searchQuery);
+    final detected = <String>{};
+
+    for (final entry in brandKeywords.entries) {
+      if (entry.value.any((keyword) => query.contains(normalizeText(keyword)))) {
+        detected.add(entry.key);
+      }
+    }
+
+    return detected;
+  }
+
+  bool matchesQueryBrand(String? productTitle, String? searchQuery) {
+    final queryBrands = detectQueryBrands(searchQuery);
+    if (queryBrands.isEmpty) return true;
+
+    final title = normalizeText(productTitle);
+
+    return queryBrands.any((brand) {
+      final keywords = brandKeywords[brand] ?? const <String>[];
+      return keywords.any((keyword) => title.contains(normalizeText(keyword)));
+    });
+  }
+
   bool isAccessory(String? productTitle) {
     const accessoryKeywords = [
-      'husa', 'husă', 'huse', 'case', 'cover', 'bumper', 'toc',
-      'carcasa', 'carcasă', 'wallet', 'folio',
-      'folie', 'folii', 'sticla', 'sticlă', 'protectie', 'protecție', 'glass',
+      'husa', 'husДѓ', 'huse', 'case', 'cover', 'bumper', 'toc',
+      'carcasa', 'carcasДѓ', 'wallet', 'folio',
+      'folie', 'folii', 'sticla', 'sticlДѓ', 'protectie', 'protecИ›ie', 'glass',
       'tempered glass', 'screen protector', 'privacy glass', 'protector',
       'cablu', 'cabluri', 'cable', 'incarcator', 'charger',
-      'încărcător', 'adaptor', 'adapter',
-      'casti', 'căști', 'headphones', 'earphones', 'earbuds', 'airpods',
+      'Г®ncДѓrcДѓtor', 'adaptor', 'adapter',
+      'casti', 'cДѓИ™ti', 'headphones', 'earphones', 'earbuds', 'airpods',
       'suport', 'holder', 'stand', 'mount', 'dock',
       'baterie externa', 'powerbank', 'power bank',
       'stylus', 'pen', 'lens protector',
       'card memorie', 'sd card', 'micro sd',
       'sim card',
       'cleaner', 'curatare',
-      'chehol', 'чехол', 'чехлы', 'steklo', 'стекло', 'защитное стекло',
-      'zaryadnoe', 'зарядное', 'кабель', 'адаптер', 'держатель'
+      'chehol', 'С‡РµС…РѕР»', 'С‡РµС…Р»С‹', 'steklo', 'СЃС‚РµРєР»Рѕ', 'Р·Р°С‰РёС‚РЅРѕРµ СЃС‚РµРєР»Рѕ',
+      'zaryadnoe', 'Р·Р°СЂСЏРґРЅРѕРµ', 'РєР°Р±РµР»СЊ', 'Р°РґР°РїС‚РµСЂ', 'РґРµСЂР¶Р°С‚РµР»СЊ'
     ];
 
     final lowerTitle = normalizeText(productTitle);
@@ -242,7 +282,7 @@ class RecommendationEngine {
     if (queryTokens.isEmpty) return true;
 
     const stopWords = {
-      'de', 'cu', 'si', 'și', 'pentru', 'la', 'din', 'pe', 'in', 'în',
+      'de', 'cu', 'si', 'И™i', 'pentru', 'la', 'din', 'pe', 'in', 'Г®n',
       'the', 'and', 'for', 'pro', 'max', 'mini', 'plus'
     };
 
@@ -297,7 +337,7 @@ class RecommendationEngine {
         numberTokens.where((token) => storageSizes.contains(token)).toList();
     if (storageInQuery.isNotEmpty) {
       final hasStorageMatch = storageInQuery.any((size) =>
-          RegExp('\\b$size\\s?(gb|гб)?\\b', caseSensitive: false)
+          RegExp('\\b$size\\s?(gb|РіР±)?\\b', caseSensitive: false)
               .hasMatch(title));
       if (!hasStorageMatch) {
         return false;
@@ -308,8 +348,8 @@ class RecommendationEngine {
   }
 
   Set<String> get stopWords => {
-        'de', 'cu', 'si', 'și', 'sau', 'pentru', 'la', 'din', 'pe', 'in',
-        'în', 'the', 'and', 'for', 'pro', 'max', 'mini', 'plus'
+        'de', 'cu', 'si', 'И™i', 'sau', 'pentru', 'la', 'din', 'pe', 'in',
+        'Г®n', 'the', 'and', 'for', 'pro', 'max', 'mini', 'plus'
       };
 
   bool passesBasicFilters(Product product, Map<String, dynamic> filters) {
@@ -359,6 +399,44 @@ class RecommendationEngine {
     return false;
   }
 
+  List<Product> rankPreFilteredProducts(
+      List<Product> products, String searchQuery, Map<String, dynamic> filters) {
+    if (products.isEmpty) return [];
+
+    final filteredProducts = products
+        .where((product) => passesBasicFilters(product, filters))
+        .toList();
+    if (filteredProducts.isEmpty) return [];
+
+    final prices = filteredProducts
+        .map((p) => p.price)
+        .where((price) => price.isFinite)
+        .toList();
+
+    final priceRange = <String, double>{
+      'minPrice': prices.isNotEmpty ? prices.reduce(min) : 0,
+      'maxPrice': prices.isNotEmpty ? prices.reduce(max) : 0,
+    };
+
+    final scoredProducts = filteredProducts.map((product) {
+      final existingScore = product.recommendationScore;
+      final scoreData = calculateProductScore(product, searchQuery, priceRange);
+      final finalScore = existingScore != null
+          ? ((existingScore + (scoreData['finalScore'] as int)) / 2).round()
+          : scoreData['finalScore'] as int;
+
+      return product.copyWith(
+        recommendationScore: finalScore,
+        scoreBreakdown: scoreData['breakdown'] as Map<String, dynamic>,
+        nlpData: scoreData['nlpAnalysis'] as Map<String, dynamic>,
+        reviewCount: getReviewCount(product),
+      );
+    }).toList();
+
+    final sortBy = (filters['sortBy'] as String?) ?? 'score';
+    return sortProducts(scoredProducts, sortBy);
+  }
+
   List<Product> recommendProducts(
       List<Product> products, String searchQuery, Map<String, dynamic> filters) {
     if (products.isEmpty) return [];
@@ -369,6 +447,7 @@ class RecommendationEngine {
 
     // Strict filtering
     var strictFilteredProducts = productsToRank.where((product) {
+      if (!matchesQueryBrand(product.title, searchQuery)) return false;
       if (!matchesQueryCategory(product.title, searchQuery)) return false;
       if (!isRelevantToQuery(product.title, searchQuery)) return false;
       if (!matchesModelNumber(product.title, searchQuery)) return false;
@@ -380,6 +459,7 @@ class RecommendationEngine {
       filteredProducts = strictFilteredProducts;
     } else {
       filteredProducts = productsToRank.where((product) {
+        if (!matchesQueryBrand(product.title, searchQuery)) return false;
         if (!matchesQueryCategory(product.title, searchQuery)) return false;
         if (!isRelaxedRelevant(product.title, searchQuery)) return false;
         return passesBasicFilters(product, filters);
@@ -392,6 +472,7 @@ class RecommendationEngine {
       if (modelCodes.isNotEmpty) {
         filteredProducts = productsToRank.where((product) {
           if (!passesBasicFilters(product, filters)) return false;
+          if (!matchesQueryBrand(product.title, searchQuery)) return false;
           final title = product.title;
           return modelCodes.any((code) => titleContainsModelCode(title, code));
         }).toList();

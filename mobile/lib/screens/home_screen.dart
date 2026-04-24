@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
     };
 
     final recommendations =
-        _recommendationEngine.recommendProducts(prods, q, parsedFilters);
+        _recommendationEngine.rankPreFilteredProducts(prods, q, parsedFilters);
 
     setState(() {
       _scoredResults = recommendations;
@@ -143,15 +143,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _selectSearchTerm(String query, Map<String, dynamic> interpretation) {
-    final intent = interpretation['intent']?.toString().trim().toLowerCase();
     final terms = (interpretation['searchTerms'] as List<dynamic>?)
             ?.map((term) => term.toString().trim())
             .where((term) => term.isNotEmpty)
             .toList() ??
         [];
 
-    if (intent == null || intent == 'product_search' || terms.isEmpty) {
+    if (terms.isEmpty) {
       return query;
+    }
+
+    final usefulTerms = terms
+        .map((term) => term.trim())
+        .where((term) => term.length >= 2)
+        .where((term) => !RegExp(r'^\d+([.,]\d+)?$').hasMatch(term))
+        .where((term) => !RegExp(r'^\d+\s*(lei|le|mdl|ron|eur|euro)$',
+                caseSensitive: false)
+            .hasMatch(term))
+        .where((term) => !{'bun', 'buna', 'buy', 'buying'}.contains(term.toLowerCase()))
+        .toList();
+
+    final selectedTerm =
+        usefulTerms.take(3).toList().join(' ').trim().replaceAll(RegExp(r'\s+'), ' ');
+    final selectedLower = selectedTerm.toLowerCase();
+    final queryLower = query.toLowerCase();
+
+    if (selectedTerm.isEmpty || selectedLower == queryLower) {
+      return query;
+    }
+
+    if (queryLower.contains(selectedLower) && selectedTerm.length >= 3) {
+      return selectedTerm;
     }
 
     final queryTokens = query
@@ -159,13 +181,51 @@ class _HomeScreenState extends State<HomeScreen> {
         .split(RegExp(r'\s+'))
         .where((token) => token.length >= 3)
         .toList();
-    final selectedTerm = terms.first;
-    final selectedLower = selectedTerm.toLowerCase();
     final preservedSignals = queryTokens
         .where((token) => selectedLower.contains(token))
         .length;
 
-    return preservedSignals >= 2 ? selectedTerm : query;
+    return preservedSignals >= 1 ? selectedTerm : query;
+  }
+
+  Map<String, dynamic> _mergeAiFilters(
+      Map<String, dynamic> baseFilters, Map<String, dynamic> interpretation) {
+    final merged = Map<String, dynamic>.from(baseFilters);
+    final aiFilters = interpretation['filters'];
+
+    if (aiFilters is! Map<String, dynamic>) {
+      return merged;
+    }
+
+    final maxPrice = double.tryParse(aiFilters['maxPrice']?.toString() ?? '');
+    if (maxPrice != null && maxPrice > 0) {
+      merged['maxPrice'] = maxPrice;
+    }
+
+    final minRating = double.tryParse(aiFilters['minRating']?.toString() ?? '');
+    if (minRating != null && minRating >= 0 && minRating <= 5) {
+      merged['minRating'] = minRating;
+    }
+
+    if (aiFilters['inStock'] is bool) {
+      merged['inStock'] = aiFilters['inStock'];
+    }
+
+    const allowedSorts = {'score', 'price-asc', 'price-desc', 'rating'};
+    final sortBy = aiFilters['sortBy']?.toString();
+    if (sortBy != null && allowedSorts.contains(sortBy)) {
+      merged['sortBy'] = sortBy;
+    }
+
+    return merged;
+  }
+
+  String _recommendationQuery(String originalQuery, String selectedSearchTerm) {
+    final selected = selectedSearchTerm.trim();
+    if (selected.length >= 3) {
+      return selected;
+    }
+    return originalQuery;
   }
 
   Future<void> _performSearch(String? overrideQuery) async {
@@ -191,18 +251,23 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final interpretation = await _apiService.interpretQuery(q);
+      final smartResult = await _apiService.smartSearch(q);
+      final interpretation =
+          smartResult['interpretation'] as Map<String, dynamic>? ??
+              <String, dynamic>{};
+      final rawProducts =
+          smartResult['products'] as List<Product>? ?? <Product>[];
+      final effectiveFilters = _mergeAiFilters(_filters, interpretation);
 
-      if (interpretation['fallback'] != true) {
-        setState(() {
+      setState(() {
+        _filters = effectiveFilters;
+        if (interpretation['fallback'] != true) {
           _aiInsight = interpretation;
-        });
-      }
+        }
+      });
 
       final selectedSearchTerm = _selectSearchTerm(q, interpretation);
-      final scrapedProducts = await _apiService.searchProducts(selectedSearchTerm);
-      final rawProducts =
-          await _apiService.filterProductsWithAi(q, scrapedProducts);
+      final recommendationQuery = _recommendationQuery(q, selectedSearchTerm);
 
       final normalizedProducts = rawProducts
           .asMap()
@@ -224,7 +289,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       await Future.delayed(const Duration(milliseconds: 800));
 
-      _applyFiltersAndDisplay(normalizedProducts, q, _filters);
+      _applyFiltersAndDisplay(
+          normalizedProducts, recommendationQuery, effectiveFilters);
     } catch (e) {
       setState(() {
         _loading = false;

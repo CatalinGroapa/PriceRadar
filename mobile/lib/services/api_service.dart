@@ -4,6 +4,29 @@ import '../config/api_config.dart';
 import '../models/product.dart';
 
 class ApiService {
+  /// GET /smart-search?q=...
+  Future<Map<String, dynamic>> smartSearch(String query) async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/smart-search?q=${Uri.encodeComponent(query)}'),
+    ).timeout(const Duration(seconds: 90));
+
+    if (response.statusCode != 200) {
+      throw Exception('smart-search failed: HTTP ${response.statusCode}');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final interpretation =
+        data['interpretation'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final productsJson = data['products'] as List<dynamic>? ?? const [];
+
+    return {
+      'interpretation': interpretation,
+      'products': productsJson
+          .map((json) => Product.fromJson(json as Map<String, dynamic>))
+          .toList(),
+    };
+  }
+
   /// POST /interpret-query
   Future<Map<String, dynamic>> interpretQuery(String query) async {
     try {
@@ -83,17 +106,12 @@ class ApiService {
     return {
       'id': product.id,
       'title': product.title,
-      'description': product.description,
       'store': product.store,
-      'storeUrl': product.storeUrl,
       'productUrl': product.productUrl,
-      'image': product.image,
       'price': product.price,
       'rating': product.rating,
       'reviewCount': product.reviewCount,
       'inStock': product.inStock,
-      'reviews': product.reviews,
-      'specs': product.specs,
     };
   }
 }

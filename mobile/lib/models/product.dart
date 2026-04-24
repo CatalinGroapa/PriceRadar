@@ -84,6 +84,7 @@ class Product {
       inStock: json['inStock'] == true,
       reviews: reviews,
       specs: specs,
+      recommendationScore: _toInt(json['recommendationScore']),
     );
   }
 
